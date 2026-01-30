@@ -208,32 +208,24 @@ export async function registerRoutes(
 
   // Apply Winner Endpoint
   app.post(api.tests.applyWinner.path, async (req, res) => {
+    // ... existing implementation
+  });
+
+  app.post("/api/tests/:id/start", async (req, res) => {
+    const test = await storage.updateTestStatus(Number(req.params.id), "running");
+    if (!test) return res.status(404).json({ message: "Test not found" });
+    res.json(test);
+  });
+
+  app.patch("/api/tests/:id", async (req, res) => {
     const testId = Number(req.params.id);
-    try {
-      const input = api.tests.applyWinner.input.parse(req.body);
-      const test = await storage.getTest(testId);
-      
-      if (!test) {
-        return res.status(404).json({ message: 'Test not found' });
-      }
-      
-      // Verify the variant belongs to this test
-      const variant = test.variants.find(v => v.id === input.winnerVariantId);
-      if (!variant) {
-        return res.status(400).json({ message: 'Variant not found in this test' });
-      }
-      
-      const updated = await storage.updateTestWinner(testId, input.winnerVariantId);
-      res.json(updated);
-    } catch (err) {
-      if (err instanceof z.ZodError) {
-        return res.status(400).json({
-          message: err.errors[0].message,
-          field: err.errors[0].path.join('.'),
-        });
-      }
-      throw err;
-    }
+    const existing = await storage.getTest(testId);
+    if (!existing) return res.status(404).json({ message: "Test not found" });
+    if (existing.status !== "draft") return res.status(400).json({ message: "Can only edit draft tests" });
+    
+    const input = api.tests.create.input.partial().parse(req.body);
+    const updated = await storage.updateTest(testId, input as any);
+    res.json(updated);
   });
 
   // AI Analysis Endpoint

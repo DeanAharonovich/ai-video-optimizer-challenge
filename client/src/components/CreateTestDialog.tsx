@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -10,6 +10,8 @@ import { Plus, Trash2, Video, Loader2, Upload, Image, CheckCircle } from "lucide
 import { useCreateTest } from "@/hooks/use-tests";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import { queryClient } from "@/lib/queryClient";
+import { api } from "@shared/routes";
 
 const formSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -21,7 +23,7 @@ const formSchema = z.object({
     videoUrl: z.string().min(1, "Video file is required"),
     thumbnailUrl: z.string().min(1, "Thumbnail is required"),
     description: z.string().optional(),
-  })).min(2, "At least 2 variants are required"),
+  })).min(2, "At least 2 variants are required").max(3, "Max 3 variants allowed"),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -29,15 +31,20 @@ type FormValues = z.infer<typeof formSchema>;
 interface CreateTestDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialData?: any;
+  isEditing?: boolean;
 }
 
-export function CreateTestDialog({ open, onOpenChange }: CreateTestDialogProps) {
+export function CreateTestDialog({ open, onOpenChange, initialData, isEditing }: CreateTestDialogProps) {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const createTest = useCreateTest();
   const [uploadingFiles, setUploadingFiles] = useState<Record<string, boolean>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const disabled = isEditing && initialData?.status !== 'draft';
   
-  const { register, control, handleSubmit, setValue, watch, formState: { errors } } = useForm<FormValues>({
+  const { register, control, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: "",
@@ -51,6 +58,23 @@ export function CreateTestDialog({ open, onOpenChange }: CreateTestDialogProps) 
     },
   });
 
+  useEffect(() => {
+    if (initialData) {
+      reset({
+        name: initialData.name,
+        productName: initialData.productName,
+        targetPopulation: initialData.targetPopulation,
+        durationDays: initialData.durationDays,
+        variants: initialData.variants.map((v: any) => ({
+          name: v.name,
+          videoUrl: v.videoUrl,
+          thumbnailUrl: v.thumbnailUrl,
+          description: v.description || "",
+        })),
+      });
+    }
+  }, [initialData, reset]);
+
   const { fields, append, remove } = useFieldArray({
     control,
     name: "variants",
@@ -58,11 +82,8 @@ export function CreateTestDialog({ open, onOpenChange }: CreateTestDialogProps) 
 
   const variants = watch("variants");
 
-  const handleFileUpload = async (
-    file: File,
-    variantIndex: number,
-    type: "video" | "thumbnail"
-  ) => {
+  const handleFileUpload = async (file: File, variantIndex: number, type: "video" | "thumbnail") => {
+    if (disabled) return;
     const uploadKey = `${variantIndex}-${type}`;
     setUploadingFiles(prev => ({ ...prev, [uploadKey]: true }));
 
@@ -70,56 +91,43 @@ export function CreateTestDialog({ open, onOpenChange }: CreateTestDialogProps) 
       const response = await fetch("/api/uploads/request-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: file.name,
-          size: file.size,
-          contentType: file.type,
-        }),
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
       });
-
       if (!response.ok) throw new Error("Failed to get upload URL");
-
       const { uploadURL, objectPath } = await response.json();
-
-      await fetch(uploadURL, {
-        method: "PUT",
-        body: file,
-        headers: { "Content-Type": file.type },
-      });
-
-      const fieldName = type === "video" ? "videoUrl" : "thumbnailUrl";
-      setValue(`variants.${variantIndex}.${fieldName}`, objectPath);
-
-      toast({
-        title: "File Uploaded",
-        description: `${type === "video" ? "Video" : "Thumbnail"} uploaded successfully.`,
-      });
+      await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      setValue(`variants.${variantIndex}.${type === "video" ? "videoUrl" : "thumbnailUrl"}`, objectPath);
+      toast({ title: "File Uploaded", description: "Uploaded successfully." });
     } catch (error) {
-      toast({
-        title: "Upload Failed",
-        description: "Failed to upload file. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Upload Failed", description: "Failed to upload file.", variant: "destructive" });
     } finally {
       setUploadingFiles(prev => ({ ...prev, [uploadKey]: false }));
     }
   };
 
   const onSubmit = async (data: FormValues) => {
+    if (disabled) return;
+    setIsSubmitting(true);
     try {
-      await createTest.mutateAsync(data);
-      toast({
-        title: "Test Created",
-        description: "Your A/B test has been successfully scheduled.",
-      });
+      if (isEditing) {
+        const res = await fetch(`/api/tests/${initialData.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        if (!res.ok) throw new Error("Failed to update test");
+        queryClient.invalidateQueries({ queryKey: [api.tests.list.path] });
+        queryClient.invalidateQueries({ queryKey: [api.tests.get.path, initialData.id] });
+      } else {
+        await createTest.mutateAsync(data);
+      }
+      toast({ title: isEditing ? "Test Updated" : "Test Created", description: "Saved successfully." });
       onOpenChange(false);
-      setLocation("/");
+      if (!isEditing) setLocation("/");
     } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create test",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to save test", variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -127,58 +135,50 @@ export function CreateTestDialog({ open, onOpenChange }: CreateTestDialogProps) 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-2xl font-display">Create New A/B Test</DialogTitle>
+          <DialogTitle className="text-2xl font-display">{isEditing ? "Edit A/B Test" : "Create New A/B Test"}</DialogTitle>
           <DialogDescription>
-            Configure your video experiment details and upload variants.
+            {disabled ? "This test is already running or completed and cannot be edited." : "Configure your video experiment details and upload variants."}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 mt-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Test Name</Label>
-              <Input id="name" {...register("name")} placeholder="e.g. Summer Sale Video Copy" data-testid="input-test-name" />
-              {errors.name && <p className="text-sm text-red-500">{errors.name.message}</p>}
+              <Label>Test Name</Label>
+              <Input {...register("name")} disabled={disabled} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="productName">Product Name</Label>
-              <Input id="productName" {...register("productName")} placeholder="e.g. Premium Plan" data-testid="input-product-name" />
-              {errors.productName && <p className="text-sm text-red-500">{errors.productName.message}</p>}
+              <Label>Product Name</Label>
+              <Input {...register("productName")} disabled={disabled} />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="targetPopulation">Target Audience Size</Label>
-              <Input type="number" id="targetPopulation" {...register("targetPopulation")} data-testid="input-target-population" />
-              {errors.targetPopulation && <p className="text-sm text-red-500">{errors.targetPopulation.message}</p>}
+              <Label>Target Audience Size</Label>
+              <Input type="number" {...register("targetPopulation")} disabled={disabled} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="durationDays">Duration (Days)</Label>
-              <Input type="number" id="durationDays" {...register("durationDays")} data-testid="input-duration" />
-              {errors.durationDays && <p className="text-sm text-red-500">{errors.durationDays.message}</p>}
+              <Label>Duration (Days)</Label>
+              <Input type="number" {...register("durationDays")} disabled={disabled} />
             </div>
           </div>
 
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <Label className="text-base font-medium">Variants</Label>
-              <Button 
-                type="button" 
-                variant="outline" 
-                size="sm" 
-                onClick={() => append({ name: `Variant ${String.fromCharCode(65 + fields.length)}`, videoUrl: "", thumbnailUrl: "", description: "" })}
-                data-testid="button-add-variant"
-              >
-                <Plus className="w-4 h-4 mr-2" /> Add Variant
-              </Button>
+              <Label className="text-base font-medium">Variants (Max 3)</Label>
+              {!disabled && fields.length < 3 && (
+                <Button type="button" variant="outline" size="sm" onClick={() => append({ name: `Variant ${String.fromCharCode(65 + fields.length)}`, videoUrl: "", thumbnailUrl: "", description: "" })}>
+                  <Plus className="w-4 h-4 mr-2" /> Add Variant
+                </Button>
+              )}
             </div>
             
             {fields.map((field, index) => (
               <div key={field.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-3 relative group">
                 <div className="flex items-center justify-between">
                   <h4 className="font-medium text-sm text-slate-700">Variant {index + 1}</h4>
-                  {fields.length > 2 && (
+                  {!disabled && fields.length > 2 && (
                     <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-red-500" onClick={() => remove(index)}>
                       <Trash2 className="w-3 h-3" />
                     </Button>
@@ -188,89 +188,43 @@ export function CreateTestDialog({ open, onOpenChange }: CreateTestDialogProps) 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <Label className="text-xs text-slate-500">Name</Label>
-                    <Input {...register(`variants.${index}.name`)} placeholder="Variant Name" className="bg-white" data-testid={`input-variant-name-${index}`} />
-                    {errors.variants?.[index]?.name && <p className="text-xs text-red-500">{errors.variants[index]?.name?.message}</p>}
+                    <Input {...register(`variants.${index}.name`)} disabled={disabled} />
                   </div>
                   
                   <div className="space-y-1">
                     <Label className="text-xs text-slate-500">Video File</Label>
                     <div className="relative">
-                      <input
-                        type="file"
-                        accept="video/*"
-                        className="hidden"
-                        id={`video-${index}`}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleFileUpload(file, index, "video");
-                        }}
-                        data-testid={`input-video-file-${index}`}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full justify-start bg-white"
-                        onClick={() => document.getElementById(`video-${index}`)?.click()}
-                        disabled={uploadingFiles[`${index}-video`]}
-                      >
-                        {uploadingFiles[`${index}-video`] ? (
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        ) : variants[index]?.videoUrl ? (
-                          <CheckCircle className="w-4 h-4 mr-2 text-emerald-500" />
-                        ) : (
-                          <Video className="w-4 h-4 mr-2 text-slate-400" />
-                        )}
-                        {variants[index]?.videoUrl ? "Video uploaded" : "Upload video"}
+                      <input type="file" accept="video/*" className="hidden" id={`video-${index}`} onChange={(e) => { const file = e.target.files?.[0]; if (file) handleFileUpload(file, index, "video"); }} />
+                      <Button type="button" variant="outline" className="w-full justify-start bg-white" onClick={() => document.getElementById(`video-${index}`)?.click()} disabled={disabled || uploadingFiles[`${index}-video`]}>
+                        {uploadingFiles[`${index}-video`] ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : variants[index]?.videoUrl ? <CheckCircle className="w-4 h-4 mr-2 text-emerald-500" /> : <Video className="w-4 h-4 mr-2 text-slate-400" />}
+                        {variants[index]?.videoUrl ? "Uploaded" : "Upload video"}
                       </Button>
                     </div>
-                    {errors.variants?.[index]?.videoUrl && <p className="text-xs text-red-500">{errors.variants[index]?.videoUrl?.message}</p>}
                   </div>
                   
                   <div className="col-span-2 space-y-1">
                     <Label className="text-xs text-slate-500">Thumbnail Image</Label>
                     <div className="relative">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        id={`thumbnail-${index}`}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleFileUpload(file, index, "thumbnail");
-                        }}
-                        data-testid={`input-thumbnail-file-${index}`}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full justify-start bg-white"
-                        onClick={() => document.getElementById(`thumbnail-${index}`)?.click()}
-                        disabled={uploadingFiles[`${index}-thumbnail`]}
-                      >
-                        {uploadingFiles[`${index}-thumbnail`] ? (
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        ) : variants[index]?.thumbnailUrl ? (
-                          <CheckCircle className="w-4 h-4 mr-2 text-emerald-500" />
-                        ) : (
-                          <Image className="w-4 h-4 mr-2 text-slate-400" />
-                        )}
-                        {variants[index]?.thumbnailUrl ? "Thumbnail uploaded" : "Upload thumbnail"}
+                      <input type="file" accept="image/*" className="hidden" id={`thumbnail-${index}`} onChange={(e) => { const file = e.target.files?.[0]; if (file) handleFileUpload(file, index, "thumbnail"); }} />
+                      <Button type="button" variant="outline" className="w-full justify-start bg-white" onClick={() => document.getElementById(`thumbnail-${index}`)?.click()} disabled={disabled || uploadingFiles[`${index}-thumbnail`]}>
+                        {uploadingFiles[`${index}-thumbnail`] ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : variants[index]?.thumbnailUrl ? <CheckCircle className="w-4 h-4 mr-2 text-emerald-500" /> : <Image className="w-4 h-4 mr-2 text-slate-400" />}
+                        {variants[index]?.thumbnailUrl ? "Uploaded" : "Upload thumbnail"}
                       </Button>
                     </div>
-                    {errors.variants?.[index]?.thumbnailUrl && <p className="text-xs text-red-500">{errors.variants[index]?.thumbnailUrl?.message}</p>}
                   </div>
                 </div>
               </div>
             ))}
-            {errors.variants && <p className="text-sm text-red-500">{errors.variants.message}</p>}
           </div>
 
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={createTest.isPending} className="bg-indigo-600 hover:bg-indigo-700 text-white" data-testid="button-create-test">
-              {createTest.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Create Test
-            </Button>
+            {!disabled && (
+              <Button type="submit" disabled={isSubmitting} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                {isEditing ? "Save Changes" : "Create Test"}
+              </Button>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>

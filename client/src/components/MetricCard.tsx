@@ -33,7 +33,6 @@ export function MetricCard({ label, value, trend, icon, className }: MetricCardP
         )}>
           {trend.isPositive ? <ArrowUpRight className="w-3 h-3 mr-1" /> : <ArrowDownRight className="w-3 h-3 mr-1" />}
           {trend.value}%
-          <span className="ml-1 text-slate-500 opacity-70">vs last period</span>
         </div>
       )}
     </div>

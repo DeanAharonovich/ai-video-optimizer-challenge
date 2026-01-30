@@ -8,7 +8,7 @@ import { z } from "zod";
 export const tests = pgTable("tests", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  status: text("status").notNull().default("running"), // 'running' | 'completed' | 'winner_applied'
+  status: text("status").notNull().default("draft"), // 'draft' | 'running' | 'completed' | 'winner_applied'
   productName: text("product_name").notNull(),
   targetPopulation: integer("target_population").notNull(),
   durationDays: integer("duration_days").notNull(), // How long the test is scheduled for

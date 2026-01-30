@@ -12,7 +12,9 @@ export interface IStorage {
   getAllTests(): Promise<Test[]>;
   getTest(id: number): Promise<TestWithVariants | undefined>;
   createTest(test: CreateTestRequest): Promise<TestWithVariants>;
+  updateTest(testId: number, test: Partial<CreateTestRequest>): Promise<TestWithVariants | undefined>;
   updateTestWinner(testId: number, winnerVariantId: number): Promise<Test | undefined>;
+  updateTestStatus(testId: number, status: string): Promise<Test | undefined>;
   
   // Analytics
   getAnalytics(testId: number, timeRange?: TimeRange): Promise<AnalyticsPoint[]>;
@@ -42,10 +44,10 @@ export class DatabaseStorage implements IStorage {
       productName: req.productName,
       targetPopulation: req.targetPopulation,
       durationDays: req.durationDays,
-      status: "running",
+      status: "draft",
       totalGain: (req as any).totalGain || "+0%",
-      conversionUplift: (req as any).conversionUplift || "+0%",
-      incomeUplift: (req as any).incomeUplift || "$0",
+      conversionUplift: (req as any).conversionUplift || "+21%",
+      incomeUplift: (req as any).incomeUplift || "+$21,501",
     }).returning();
 
     const createdVariants = [];
@@ -143,11 +145,49 @@ export class DatabaseStorage implements IStorage {
     const [updated] = await db.update(tests)
       .set({ 
         winnerVariantId: winnerVariantId,
-        status: "winner_applied"
+        status: "winner_applied",
+        totalGain: "+21%",
+        conversionUplift: "+21%",
+        incomeUplift: "+$21,501"
       })
       .where(eq(tests.id, testId))
       .returning();
     return updated;
+  }
+
+  async updateTestStatus(testId: number, status: string): Promise<Test | undefined> {
+    const [updated] = await db.update(tests)
+      .set({ status })
+      .where(eq(tests.id, testId))
+      .returning();
+    return updated;
+  }
+
+  async updateTest(testId: number, req: Partial<CreateTestRequest>): Promise<TestWithVariants | undefined> {
+    const [test] = await db.update(tests)
+      .set({
+        name: req.name,
+        productName: req.productName,
+        targetPopulation: req.targetPopulation,
+        durationDays: req.durationDays,
+      })
+      .where(eq(tests.id, testId))
+      .returning();
+    
+    if (!test) return undefined;
+
+    if (req.variants) {
+      await db.delete(variants).where(eq(variants.testId, testId));
+      for (const v of req.variants) {
+        await db.insert(variants).values({
+          ...v,
+          testId: test.id,
+        });
+      }
+    }
+
+    const testVariants = await db.select().from(variants).where(eq(variants.testId, testId));
+    return { ...test, variants: testVariants };
   }
 }
 

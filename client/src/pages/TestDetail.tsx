@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useRoute, Link } from "wouter";
 import { useTest, useTestAnalytics, useAnalyzeTest, useApplyWinner } from "@/hooks/use-tests";
-import { ArrowLeft, Clock, Users, PlayCircle, BarChart2, Lightbulb, Loader2, Share2, RefreshCw, Trophy, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Clock, Users, PlayCircle, BarChart2, Lightbulb, Loader2, Share2, RefreshCw, Trophy, CheckCircle2, Play, Square, Edit2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,6 +10,9 @@ import { format } from "date-fns";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { CreateTestDialog } from "@/components/CreateTestDialog";
+import { queryClient } from "@/lib/queryClient";
 
 export default function TestDetail() {
   const [, params] = useRoute("/tests/:id");
@@ -22,11 +25,28 @@ export default function TestDetail() {
   const { mutate: applyWinner, isPending: isApplyingWinner } = useApplyWinner();
   const { toast } = useToast();
   const [selectedWinner, setSelectedWinner] = useState<number | null>(null);
+  const [previewVideo, setPreviewVideo] = useState<string | null>(null);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
 
   // Handle data refresh
   const handleRefresh = () => {
     refetchTest();
     refetchAnalytics();
+  };
+
+  const handleStartTest = async () => {
+    setIsStarting(true);
+    try {
+      const res = await fetch(`/api/tests/${id}/start`, { method: 'POST' });
+      if (!res.ok) throw new Error("Failed to start test");
+      toast({ title: "Test Started", description: "Experiment is now collecting live data." });
+      refetchTest();
+    } catch (err) {
+      toast({ title: "Error", description: "Could not start test", variant: "destructive" });
+    } finally {
+      setIsStarting(false);
+    }
   };
 
   if (isTestLoading) {
@@ -56,12 +76,16 @@ export default function TestDetail() {
           <h1 className="text-3xl font-display font-bold text-slate-900">{test.name}</h1>
           <div className="flex items-center gap-4 text-sm text-slate-500">
             <span className="flex items-center">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 mr-2 animate-pulse" />
-              Running
+              <span className={cn(
+                "w-2 h-2 rounded-full mr-2",
+                test.status === 'running' ? "bg-emerald-500 animate-pulse" : 
+                test.status === 'draft' ? "bg-slate-400" : "bg-blue-500"
+              )} />
+              {test.status === 'draft' ? "Not Started" : test.status.charAt(0).toUpperCase() + test.status.slice(1).replace('_', ' ')}
             </span>
             <span className="flex items-center">
               <Clock className="w-4 h-4 mr-1.5" />
-              {test.durationDays} days remaining
+              {test.durationDays} days duration
             </span>
             <span className="flex items-center">
               <Users className="w-4 h-4 mr-1.5" />
@@ -70,23 +94,37 @@ export default function TestDetail() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+           {test.status === 'draft' && (
+             <Button 
+               onClick={handleStartTest} 
+               disabled={isStarting}
+               className="bg-emerald-600 hover:bg-emerald-700 text-white"
+             >
+               {isStarting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2" />}
+               Start Test
+             </Button>
+           )}
            <Button variant="outline" size="sm" onClick={handleRefresh}>
              <RefreshCw className="w-4 h-4 mr-2" /> Refresh Data
            </Button>
-           <Button variant="outline" size="sm">
-             <Share2 className="w-4 h-4 mr-2" /> Share Report
-           </Button>
-           <Button className="bg-indigo-600 hover:bg-indigo-700 text-white">
-             Edit Configuration
+           <Button 
+             variant={test.status === 'draft' ? "default" : "outline"} 
+             size="sm" 
+             onClick={() => setIsEditOpen(true)}
+             className={cn(test.status === 'draft' ? "bg-indigo-600 text-white" : "")}
+           >
+             <Edit2 className="w-4 h-4 mr-2" /> 
+             {test.status === 'draft' ? "Edit Configuration" : "View Configuration"}
            </Button>
         </div>
       </div>
 
-      {/* Variants Preview with Apply Winner */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Variants Preview */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {test.variants.map((variant, idx) => {
           const isWinner = test.winnerVariantId === variant.id;
           const isSelected = selectedWinner === variant.id;
+          const thumbUrl = variant.thumbnailUrl.startsWith('/') ? variant.thumbnailUrl : variant.thumbnailUrl;
           
           return (
             <div 
@@ -97,7 +135,6 @@ export default function TestDetail() {
                 isSelected ? "border-indigo-500 ring-2 ring-indigo-500/20" : "border-slate-100"
               )}
               onClick={() => test.status !== "winner_applied" && setSelectedWinner(variant.id)}
-              data-testid={`variant-card-${variant.id}`}
             >
               {isWinner && (
                 <div className="absolute top-3 right-3 z-10 flex items-center gap-1 bg-emerald-500 text-white px-2 py-1 rounded-full text-xs font-medium">
@@ -107,22 +144,25 @@ export default function TestDetail() {
               )}
               <div className="aspect-video bg-slate-100 relative overflow-hidden">
                 <img 
-                  src={variant.thumbnailUrl || (idx === 0 
-                    ? "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&auto=format&fit=crop&q=60"
-                    : "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&auto=format&fit=crop&q=60"
-                  )} 
+                  src={thumbUrl} 
                   alt={variant.name} 
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                  onError={(e) => {
-                    e.currentTarget.src = idx === 0 
-                      ? "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&auto=format&fit=crop&q=60"
-                      : "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&auto=format&fit=crop&q=60";
-                  }}
                 />
-                <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
+                <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                  <Button 
+                    size="icon" 
+                    variant="ghost" 
+                    className="text-white bg-black/40 hover:bg-black/60 rounded-full h-12 w-12"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPreviewVideo(variant.videoUrl);
+                    }}
+                  >
+                    <PlayCircle className="w-8 h-8" />
+                  </Button>
+                </div>
                 <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between text-white">
                    <span className="font-medium bg-black/50 px-2 py-1 rounded text-sm backdrop-blur-sm">{variant.name}</span>
-                   <PlayCircle className="w-8 h-8 opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all" />
                 </div>
               </div>
               <div className="p-4 flex items-center justify-between">
@@ -139,8 +179,51 @@ export default function TestDetail() {
         })}
       </div>
 
+      {/* Analytics Chart Section */}
+      {test.status !== 'draft' && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-6">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-display font-semibold text-slate-900 flex items-center gap-2">
+                <BarChart2 className="w-5 h-5 text-indigo-600" />
+                Performance Analytics
+              </h3>
+              <p className="text-sm text-slate-500">Real-time conversion metrics comparison</p>
+            </div>
+            <Tabs defaultValue="1w" onValueChange={(v) => setTimeRange(v as any)} className="w-auto">
+              <TabsList className="bg-slate-100 p-1 rounded-lg">
+                {['1h', '1d', '1w', '1m'].map(t => (
+                  <TabsTrigger key={t} value={t} className="px-3 py-1.5 text-xs font-medium rounded-md data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-sm transition-all">
+                    {t.toUpperCase()}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          </div>
+          <div className="h-[400px] w-full">
+            {isAnalyticsLoading ? (
+              <div className="h-full w-full flex items-center justify-center bg-slate-50 rounded-xl">
+                <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={analytics}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="timestamp" tickFormatter={(ts) => format(new Date(ts), timeRange === '1h' ? 'HH:mm' : 'MMM d')} stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} dy={10} />
+                  <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} dx={-10} />
+                  <Tooltip contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} labelStyle={{ color: '#64748b', fontSize: '12px', marginBottom: '8px' }} labelFormatter={(ts) => format(new Date(ts), 'PPP p')} />
+                  <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
+                  <Line type="monotone" dataKey="views" stroke="#4f46e5" strokeWidth={3} dot={false} activeDot={{ r: 6, strokeWidth: 0 }} />
+                  <Line type="monotone" dataKey="conversions" stroke="#10b981" strokeWidth={3} dot={false} activeDot={{ r: 6, strokeWidth: 0 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Apply Winner Button */}
-      {test.status !== "winner_applied" && (
+      {test.status === "running" && (
         <div className="flex items-center justify-center gap-4 p-6 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl border border-indigo-100">
           <div className="text-center">
             <h3 className="font-display font-semibold text-slate-900">Ready to apply the winner?</h3>
@@ -155,29 +238,14 @@ export default function TestDetail() {
               if (!selectedWinner) return;
               applyWinner({ testId: id, winnerVariantId: selectedWinner }, {
                 onSuccess: () => {
-                  toast({
-                    title: "Winner Applied",
-                    description: "100% of traffic will now be directed to the winning variant.",
-                  });
-                },
-                onError: (error) => {
-                  toast({
-                    title: "Error",
-                    description: error.message,
-                    variant: "destructive",
-                  });
-                },
+                  toast({ title: "Winner Applied", description: "100% of traffic will now be directed to the winning variant." });
+                }
               });
             }}
             disabled={!selectedWinner || isApplyingWinner}
             className="bg-emerald-600 hover:bg-emerald-700 text-white"
-            data-testid="button-apply-winner"
           >
-            {isApplyingWinner ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Trophy className="w-4 h-4 mr-2" />
-            )}
+            {isApplyingWinner ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trophy className="w-4 h-4 mr-2" />}
             Apply Winner
           </Button>
         </div>
@@ -192,190 +260,19 @@ export default function TestDetail() {
         </div>
       )}
 
-      {/* Analytics Chart Section */}
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-6">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div>
-            <h3 className="text-lg font-display font-semibold text-slate-900 flex items-center gap-2">
-              <BarChart2 className="w-5 h-5 text-indigo-600" />
-              Performance Analytics
-            </h3>
-            <p className="text-sm text-slate-500">Real-time conversion metrics comparison</p>
-          </div>
-          <Tabs defaultValue="1w" onValueChange={(v) => setTimeRange(v as any)} className="w-auto">
-            <TabsList className="bg-slate-100 p-1 rounded-lg">
-              {['1h', '1d', '1w', '1m'].map(t => (
-                <TabsTrigger 
-                  key={t} 
-                  value={t}
-                  className="px-3 py-1.5 text-xs font-medium rounded-md data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-sm transition-all"
-                >
-                  {t.toUpperCase()}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-        </div>
+      {/* Dialogs */}
+      <Dialog open={!!previewVideo} onOpenChange={() => setPreviewVideo(null)}>
+        <DialogContent className="max-w-4xl p-0 bg-black overflow-hidden border-none">
+          <video src={previewVideo || ""} controls autoPlay className="w-full h-full aspect-video" />
+        </DialogContent>
+      </Dialog>
 
-        <div className="h-[400px] w-full">
-          {isAnalyticsLoading ? (
-            <div className="h-full w-full flex items-center justify-center bg-slate-50 rounded-xl">
-              <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={analytics}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis 
-                  dataKey="timestamp" 
-                  tickFormatter={(ts) => format(new Date(ts), timeRange === '1h' ? 'HH:mm' : 'MMM d')}
-                  stroke="#94a3b8"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                  dy={10}
-                />
-                <YAxis 
-                  stroke="#94a3b8"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                  dx={-10}
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'rgba(255, 255, 255, 0.9)', 
-                    borderRadius: '12px', 
-                    border: 'none', 
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' 
-                  }}
-                  labelStyle={{ color: '#64748b', fontSize: '12px', marginBottom: '8px' }}
-                  labelFormatter={(ts) => format(new Date(ts), 'PPP p')}
-                />
-                <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
-                
-                {/* Variant A Line */}
-                <Line 
-                  type="monotone" 
-                  dataKey="views" 
-                  name="Variant A (Views)" 
-                  stroke="#4f46e5" /* Indigo */
-                  strokeWidth={3}
-                  dot={false}
-                  activeDot={{ r: 6, strokeWidth: 0 }}
-                />
-                {/* Variant B Line */}
-                <Line 
-                  type="monotone" 
-                  dataKey="conversions" 
-                  name="Variant B (Views)" 
-                  stroke="#10b981" /* Emerald */
-                  strokeWidth={3}
-                  dot={false}
-                  activeDot={{ r: 6, strokeWidth: 0 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </div>
-
-      {/* AI Analysis Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-gradient-to-br from-indigo-900 to-purple-900 rounded-2xl p-8 text-white relative overflow-hidden">
-          {/* Decorative background elements */}
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-indigo-500/20 rounded-full blur-2xl translate-y-1/2 -translate-x-1/2" />
-
-          <div className="relative z-10">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2 bg-white/10 rounded-lg backdrop-blur-sm">
-                <Lightbulb className="w-6 h-6 text-yellow-300" />
-              </div>
-              <h3 className="text-xl font-display font-semibold">AI Optimization Insight</h3>
-            </div>
-
-            <AnimatePresence mode="wait">
-              {!analysis && !isAnalyzing ? (
-                <motion.div 
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="space-y-4"
-                >
-                  <p className="text-indigo-100 text-lg leading-relaxed">
-                    Ready to generate insights? Our AI will analyze user interaction patterns, retention rates, and conversion data to recommend the optimal variant.
-                  </p>
-                  <Button 
-                    onClick={() => analyze(id)}
-                    className="mt-4 bg-white text-indigo-900 hover:bg-indigo-50 border-none font-semibold shadow-lg shadow-black/10 transition-transform active:scale-95"
-                  >
-                    Generate Analysis
-                  </Button>
-                </motion.div>
-              ) : isAnalyzing ? (
-                <motion.div 
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="flex flex-col items-center justify-center py-12 text-center"
-                >
-                  <Loader2 className="w-10 h-10 animate-spin text-white/80 mb-4" />
-                  <p className="text-indigo-100 font-medium">Analyzing behavioral data...</p>
-                </motion.div>
-              ) : (
-                <motion.div 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="space-y-6"
-                >
-                  <div className="bg-white/10 rounded-xl p-6 backdrop-blur-md border border-white/10">
-                    <h4 className="text-sm font-bold text-indigo-200 uppercase tracking-wider mb-2">Executive Summary</h4>
-                    <p className="text-white text-lg leading-relaxed font-medium">
-                      {analysis?.summary}
-                    </p>
-                  </div>
-                  
-                  <div className="bg-emerald-500/20 rounded-xl p-6 backdrop-blur-md border border-emerald-500/30">
-                     <h4 className="text-sm font-bold text-emerald-200 uppercase tracking-wider mb-2">Recommendation</h4>
-                     <p className="text-white">
-                       {analysis?.recommendation}
-                     </p>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
-
-        {/* Stats Summary Box */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 flex flex-col justify-center gap-6">
-          <div className="text-center pb-6 border-b border-slate-100">
-            <p className="text-sm text-slate-500 font-medium mb-1">Total Conversion Lift</p>
-            <h3 className="text-5xl font-display font-bold text-emerald-600 tracking-tight">
-              {test.totalGain || "+0.0%"}
-            </h3>
-            <span className="inline-block mt-2 text-xs font-medium bg-emerald-50 text-emerald-700 px-2 py-1 rounded-full">
-              Confidence: 94%
-            </span>
-          </div>
-          
-          <div className="space-y-4">
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-slate-500">Duration</span>
-              <span className="font-medium text-slate-900">7 Days</span>
-            </div>
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-slate-500">Sample Size</span>
-              <span className="font-medium text-slate-900">{test.targetPopulation.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-slate-500">Significance</span>
-              <span className="font-medium text-slate-900">High</span>
-            </div>
-          </div>
-        </div>
-      </div>
+      <CreateTestDialog 
+        open={isEditOpen} 
+        onOpenChange={setIsEditOpen} 
+        initialData={test}
+        isEditing={true}
+      />
     </div>
   );
 }

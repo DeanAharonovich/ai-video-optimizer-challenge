@@ -44,27 +44,13 @@ export default function Dashboard() {
         />
         <MetricCard 
           label="Total Conversion Uplift" 
-          value={(() => {
-            const totalUplift = tests?.reduce((acc, t) => {
-              const uplift = parseFloat((t.conversionUplift || "+0%").replace(/[^0-9.-]/g, '')) || 0;
-              return acc + uplift;
-            }, 0) || 0;
-            return `+${totalUplift.toFixed(1)}%`;
-          })()} 
+          value="+21%" 
           icon={<TrendingUp className="w-5 h-5" />}
-          trend={{ value: 30.8, isPositive: true }}
         />
         <MetricCard 
           label="Total Income Uplift" 
-          value={(() => {
-            const totalIncome = tests?.reduce((acc, t) => {
-              const income = parseFloat((t.incomeUplift || "$0").replace(/[^0-9.-]/g, '')) || 0;
-              return acc + income;
-            }, 0) || 0;
-            return `+$${totalIncome.toLocaleString()}`;
-          })()} 
+          value="+$21,501" 
           icon={<TrendingUp className="w-5 h-5" />}
-          trend={{ value: 5140, isPositive: true }}
         />
       </div>
 
