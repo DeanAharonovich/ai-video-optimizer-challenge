@@ -1,18 +1,93 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+// === TABLE DEFINITIONS ===
+
+export const tests = pgTable("tests", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  status: text("status").notNull().default("running"), // 'running' | 'completed'
+  productName: text("product_name").notNull(),
+  targetPopulation: integer("target_population").notNull(),
+  durationDays: integer("duration_days").notNull(), // How long the test is scheduled for
+  startDate: timestamp("start_date").defaultNow(),
+  // Summary stats (cached for list view)
+  totalGain: text("total_gain"), // e.g. "+24%"
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
+export const variants = pgTable("variants", {
+  id: serial("id").primaryKey(),
+  testId: integer("test_id").notNull(),
+  name: text("name").notNull(), // 'Variant A', 'Variant B'
+  videoUrl: text("video_url").notNull(),
+  thumbnailUrl: text("thumbnail_url").notNull(),
+  description: text("description"),
 });
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+// Granular analytics data for charts
+export const analytics = pgTable("analytics", {
+  id: serial("id").primaryKey(),
+  testId: integer("test_id").notNull(),
+  variantId: integer("variant_id").notNull(),
+  timestamp: timestamp("timestamp").notNull(),
+  views: integer("views").notNull().default(0),
+  conversions: integer("conversions").notNull().default(0),
+  interactions: integer("interactions").notNull().default(0),
+});
+
+// === RELATIONS ===
+export const variantsRelations = relations(variants, ({ one }) => ({
+  test: one(tests, {
+    fields: [variants.testId],
+    references: [tests.id],
+  }),
+}));
+
+export const analyticsRelations = relations(analytics, ({ one }) => ({
+  test: one(tests, {
+    fields: [analytics.testId],
+    references: [tests.id],
+  }),
+  variant: one(variants, {
+    fields: [analytics.variantId],
+    references: [variants.id],
+  }),
+}));
+
+export const testsRelations = relations(tests, ({ many }) => ({
+  variants: many(variants),
+  analytics: many(analytics),
+}));
+
+// === BASE SCHEMAS ===
+export const insertTestSchema = createInsertSchema(tests).omit({ id: true, startDate: true });
+export const insertVariantSchema = createInsertSchema(variants).omit({ id: true });
+export const insertAnalyticsSchema = createInsertSchema(analytics).omit({ id: true });
+
+// === EXPLICIT API CONTRACT TYPES ===
+export type Test = typeof tests.$inferSelect;
+export type Variant = typeof variants.$inferSelect;
+export type AnalyticsPoint = typeof analytics.$inferSelect;
+
+export type CreateTestRequest = z.infer<typeof insertTestSchema> & {
+  variants: Omit<z.infer<typeof insertVariantSchema>, "testId">[];
+};
+
+export type TestWithVariants = Test & {
+  variants: Variant[];
+};
+
+export type TestDetailResponse = TestWithVariants & {
+  analytics: AnalyticsPoint[];
+};
+
+export type AnalysisRequest = {
+  testId: number;
+};
+
+export type AnalysisResponse = {
+  summary: string;
+  recommendation: string;
+};
