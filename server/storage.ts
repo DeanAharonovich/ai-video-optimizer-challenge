@@ -131,7 +131,12 @@ export class DatabaseStorage implements IStorage {
 
   async createAnalyticsBatch(points: Omit<AnalyticsPoint, "id">[]): Promise<void> {
     if (points.length === 0) return;
-    await db.insert(analytics).values(points);
+    // Insert in batches of 500 to avoid postgres parameter limit
+    const batchSize = 500;
+    for (let i = 0; i < points.length; i += batchSize) {
+      const batch = points.slice(i, i + batchSize);
+      await db.insert(analytics).values(batch);
+    }
   }
 
   async updateTestWinner(testId: number, winnerVariantId: number): Promise<Test | undefined> {
