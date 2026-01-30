@@ -1,0 +1,41 @@
+Build "Tolstoy AI Auto-Optimizer" - A Next-Gen E-commerce Video A/B Testing Dashboard
+
+1. Project Overview & Context: I am building a new high-end feature for Tolstoy, an interactive video platform for e-commerce. Tolstoy helps brands convert viewers into buyers using video. This new space, called "AI Auto-Optimizer", is a strategic tool that automates A/B testing between different video variants to maximize conversion rates.
+
+2. The "AI Auto-Optimizer" Workspace:
+
+Main View: A list (table view) of all past and active optimization tests. Each row should show the Test Name, Status (Running/Completed), Product Name, and a "Total Gain" summary.
+
+Navigation: When a user clicks on a test item, it opens a detailed optimization view.
+
+3. Test Configuration (The Logic):
+
+In the detailed view, show the configuration: Selected Videos (thumbnails), Target Population Size, and Test Duration.
+
+Population-Based Testing: Implement logic (simulated for now) where the A/B test is conducted by assigning unique users to groups. Group A sees Video 1, Group B sees Video 2, etc. (Instead of changing the video on every refresh, the assignment should be persistent per 'User ID').
+
+4. Advanced Analytics & Dashboards:
+
+Visualizations: Use Recharts or Chart.js to show performance over time.
+
+Line Charts: Each variant (Video 1, Video 2, etc.) should have its own colored line.
+
+KPIs: Track Conversion Rate (primary) and Interaction Rate (secondary).
+
+Time Scaling: The user must be able to toggle the graph view between: 1 Hour, 1 Day, 1 Week, and 1 Month. Ensure the X-axis scales appropriately.
+
+Data Fetching: Simulate a data-pulling mechanism that "refreshes" the charts every time the user enters the page or clicks a "Refresh Data" button.
+
+5. Optimization Summary (The "Bottom Line"):
+
+At the bottom of the page, create a Summary Section.
+
+The "Gain" Focus: Emphasize the Lift (e.g., "Video B generated a +24% increase in sales compared to Video A").
+
+AI Conclusion: A short text box summarizing the insight: "Variant B is the clear winner. We recommend allocating 100% of traffic to this video."
+
+6. UI/UX & Branding:
+
+Use Tolstoy's aesthetic: Minimalist, professional, white background, and Deep Purple/Indigo accents.
+
+Use Lucide-react for icons and Radix UI/shadcn components for a premium Feel.
