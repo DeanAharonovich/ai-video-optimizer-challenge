@@ -202,7 +202,15 @@ export default function TestDetail() {
                   )}
                 </div>
                 <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between text-white">
-                   <span className="font-medium bg-black/50 px-2 py-1 rounded text-sm backdrop-blur-sm">{variant.name}</span>
+                   <div className="flex flex-col gap-1">
+                     <span className="font-medium bg-black/50 px-2 py-1 rounded text-sm backdrop-blur-sm w-fit">{variant.name}</span>
+                     {test.status === 'running' && (
+                       <span className="text-[10px] bg-indigo-600/80 px-2 py-0.5 rounded backdrop-blur-sm w-fit flex items-center gap-1">
+                         <Users className="w-3 h-3" />
+                         {(analytics?.filter(a => a.variantId === variant.id).pop()?.views ?? 0).toLocaleString()} impressions
+                       </span>
+                     )}
+                   </div>
                 </div>
               </div>
               <div className="p-4 flex items-center justify-between">
@@ -250,7 +258,15 @@ export default function TestDetail() {
                 <LineChart data={analytics}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                   <XAxis dataKey="timestamp" tickFormatter={(ts) => format(new Date(ts), timeRange === '1h' ? 'HH:mm' : 'MMM d')} stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} dy={10} />
-                  <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} dx={-10} />
+                  <YAxis 
+                    stroke="#94a3b8" 
+                    fontSize={12} 
+                    tickLine={false} 
+                    axisLine={false} 
+                    dx={-10} 
+                    domain={[0, 'auto']}
+                    allowDataOverflow={false}
+                  />
                   <Tooltip contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} labelStyle={{ color: '#64748b', fontSize: '12px', marginBottom: '8px' }} labelFormatter={(ts) => format(new Date(ts), 'PPP p')} />
                   <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
                   {test.variants.map((v, i) => (
@@ -273,35 +289,61 @@ export default function TestDetail() {
         </div>
       )}
 
-      {/* Apply Winner Button */}
+      {/* Finish Test Section */}
       {test.status === "running" && (
-        <div className="flex items-center justify-center gap-4 p-6 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl border border-indigo-100">
-          <div className="text-center">
-            <h3 className="font-display font-semibold text-slate-900">Ready to apply the winner?</h3>
-            <p className="text-sm text-slate-500 mt-1">
-              {selectedWinner 
-                ? `You selected ${test.variants.find(v => v.id === selectedWinner)?.name}. Click to apply and direct 100% traffic.`
-                : "Select a variant above to apply as the winner."}
-            </p>
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-6">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
+              <Trophy className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-lg font-display font-semibold text-slate-900">Finish Experiment</h3>
+              <p className="text-sm text-slate-500">Select the winning variant to implement permanently.</p>
+            </div>
           </div>
-          <Button 
-            onClick={() => {
-              if (!selectedWinner) return;
-              applyWinner({ testId: id, winnerVariantId: selectedWinner }, {
-                onSuccess: () => {
-                  toast({ title: "Winner Applied", description: "100% of traffic will now be directed to the winning variant." });
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {test.variants.map((variant) => (
+              <Button
+                key={variant.id}
+                variant="outline"
+                className={cn(
+                  "h-auto py-4 px-6 flex flex-col items-center gap-2 border-2 transition-all",
+                  selectedWinner === variant.id ? "border-indigo-600 bg-indigo-50/50" : "border-slate-100 hover:border-slate-200"
+                )}
+                onClick={() => setSelectedWinner(variant.id)}
+              >
+                <span className="font-semibold text-slate-900">{variant.name}</span>
+                {selectedWinner === variant.id && <CheckCircle2 className="w-4 h-4 text-indigo-600" />}
+              </Button>
+            ))}
+          </div>
+
+          <div className="flex justify-end pt-4 border-t border-slate-50">
+            <Button 
+              onClick={() => {
+                if (!selectedWinner) {
+                  toast({ title: "Select a winner", description: "Please choose which variant to implement.", variant: "destructive" });
+                  return;
                 }
-              });
-            }}
-            disabled={!selectedWinner || isApplyingWinner}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white"
-          >
-            {isApplyingWinner ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trophy className="w-4 h-4 mr-2" />}
-            Apply Winner
-          </Button>
+                applyWinner({ testId: id, winnerVariantId: selectedWinner }, {
+                  onSuccess: () => {
+                    toast({ title: "Winner Applied", description: "100% of traffic will now be directed to the winning variant." });
+                    setSelectedWinner(null);
+                  }
+                });
+              }}
+              disabled={!selectedWinner || isApplyingWinner}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white min-w-[200px]"
+            >
+              {isApplyingWinner ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trophy className="w-4 h-4 mr-2" />}
+              Apply Winner & Finish Test
+            </Button>
+          </div>
         </div>
       )}
 
+      {/* Legacy Selection Logic Removed - Replaced by Footer Section above */}
       {test.status === "winner_applied" && (
         <div className="flex items-center justify-center gap-3 p-4 bg-emerald-50 rounded-xl border border-emerald-200">
           <CheckCircle2 className="w-5 h-5 text-emerald-600" />
