@@ -24,7 +24,7 @@ const formSchema = z.object({
     videoUrl: z.string().min(1, "Video file is required"),
     thumbnailUrl: z.string().min(1, "Thumbnail is required"),
     description: z.string().optional(),
-  })).min(3, "Exactly 3 variants are required").max(3, "Max 3 variants allowed"),
+  })).min(2, "At least 2 variants are required").max(3, "Maximum 3 variants allowed"),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -56,7 +56,6 @@ export function CreateTestDialog({ open, onOpenChange, initialData, isEditing }:
       variants: [
         { name: "Variant A", videoUrl: "", thumbnailUrl: "", description: "" },
         { name: "Variant B", videoUrl: "", thumbnailUrl: "", description: "" },
-        { name: "Variant C", videoUrl: "", thumbnailUrl: "", description: "" },
       ],
     },
   });
@@ -182,9 +181,26 @@ export function CreateTestDialog({ open, onOpenChange, initialData, isEditing }:
 
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <Label className="text-base font-medium">Variants (Max 3)</Label>
-              {!disabled && fields.length < 3 && (
-                <Button type="button" variant="outline" size="sm" onClick={() => append({ name: `Variant ${String.fromCharCode(65 + fields.length)}`, videoUrl: "", thumbnailUrl: "", description: "" })}>
+              <div>
+                <Label className="text-base font-medium">Variants (2-3 required)</Label>
+                {errors.variants?.message && (
+                  <p className="text-sm text-red-500 mt-1">{errors.variants.message}</p>
+                )}
+              </div>
+              {!disabled && (
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => {
+                    if (fields.length >= 3) {
+                      toast({ title: "Maximum Reached", description: "You can only have up to 3 variants per test.", variant: "destructive" });
+                      return;
+                    }
+                    append({ name: `Variant ${String.fromCharCode(65 + fields.length)}`, videoUrl: "", thumbnailUrl: "", description: "" });
+                  }}
+                  disabled={fields.length >= 3}
+                >
                   <Plus className="w-4 h-4 mr-2" /> Add Variant
                 </Button>
               )}
