@@ -11,7 +11,8 @@ export const tests = pgTable("tests", {
   status: text("status").notNull().default("draft"), // 'draft' | 'running' | 'completed' | 'winner_applied'
   productName: text("product_name").notNull(),
   targetPopulation: integer("target_population").notNull(),
-  durationDays: integer("duration_days").notNull(), // How long the test is scheduled for
+  startTime: timestamp("start_time").notNull().defaultNow(),
+  endTime: timestamp("end_time").notNull(),
   startDate: timestamp("start_date").defaultNow(),
   // Summary stats (cached for list view)
   totalGain: text("total_gain"), // e.g. "+24%"

@@ -22,7 +22,8 @@ async function seedDatabase() {
     name: DEMO_TEST.name,
     productName: DEMO_TEST.productName,
     targetPopulation: DEMO_TEST.targetPopulation,
-    durationDays: DEMO_TEST.durationDays,
+    startTime: DEMO_TEST.startTime,
+    endTime: DEMO_TEST.endTime,
     status: DEMO_TEST.status,
     conversionUplift: DEMO_TEST.conversionUplift,
     incomeUplift: DEMO_TEST.incomeUplift,
@@ -112,8 +113,8 @@ export async function registerRoutes(
     if (!existing) return res.status(404).json({ message: "Test not found" });
     if (existing.status !== "draft") return res.status(400).json({ message: "Can only edit draft tests" });
     
-    const input = api.tests.create.input.partial().parse(req.body);
-    const updated = await storage.updateTest(testId, input as any);
+    // Validate partial update
+    const updated = await storage.updateTest(testId, req.body);
     res.json(updated);
   });
 

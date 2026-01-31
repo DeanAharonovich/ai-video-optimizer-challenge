@@ -17,13 +17,14 @@ const formSchema = z.object({
   name: z.string().min(1, "Name is required"),
   productName: z.string().min(1, "Product name is required"),
   targetPopulation: z.coerce.number().min(1, "Must be at least 1"),
-  durationDays: z.coerce.number().min(1, "Must be at least 1 day"),
+  startTime: z.string().min(1, "Start time is required"),
+  endTime: z.string().min(1, "End time is required"),
   variants: z.array(z.object({
     name: z.string().min(1, "Variant name required"),
     videoUrl: z.string().min(1, "Video file is required"),
     thumbnailUrl: z.string().min(1, "Thumbnail is required"),
     description: z.string().optional(),
-  })).min(2, "At least 2 variants are required").max(3, "Max 3 variants allowed"),
+  })).min(3, "Exactly 3 variants are required").max(3, "Max 3 variants allowed"),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -50,10 +51,12 @@ export function CreateTestDialog({ open, onOpenChange, initialData, isEditing }:
       name: "",
       productName: "",
       targetPopulation: 1000,
-      durationDays: 7,
+      startTime: new Date().toISOString().slice(0, 16),
+      endTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
       variants: [
         { name: "Variant A", videoUrl: "", thumbnailUrl: "", description: "" },
         { name: "Variant B", videoUrl: "", thumbnailUrl: "", description: "" },
+        { name: "Variant C", videoUrl: "", thumbnailUrl: "", description: "" },
       ],
     },
   });
@@ -64,7 +67,8 @@ export function CreateTestDialog({ open, onOpenChange, initialData, isEditing }:
         name: initialData.name,
         productName: initialData.productName,
         targetPopulation: initialData.targetPopulation,
-        durationDays: initialData.durationDays,
+        startTime: new Date(initialData.startTime).toISOString().slice(0, 16),
+        endTime: new Date(initialData.endTime).toISOString().slice(0, 16),
         variants: initialData.variants.map((v: any) => ({
           name: v.name,
           videoUrl: v.videoUrl,
@@ -159,8 +163,15 @@ export function CreateTestDialog({ open, onOpenChange, initialData, isEditing }:
               <Input type="number" {...register("targetPopulation")} disabled={disabled} />
             </div>
             <div className="space-y-2">
-              <Label>Duration (Days)</Label>
-              <Input type="number" {...register("durationDays")} disabled={disabled} />
+              <Label>Start Time</Label>
+              <Input type="datetime-local" {...register("startTime")} disabled={disabled} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>End Time</Label>
+              <Input type="datetime-local" {...register("endTime")} disabled={disabled} />
             </div>
           </div>
 

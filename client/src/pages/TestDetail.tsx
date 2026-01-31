@@ -116,7 +116,7 @@ export default function TestDetail() {
             </span>
             <span className="flex items-center">
               <Clock className="w-4 h-4 mr-1.5" />
-              {test.durationDays} days duration
+              {Math.ceil((new Date(test.endTime).getTime() - new Date(test.startTime).getTime()) / (1000 * 60 * 60 * 24))} days duration
             </span>
             <span className="flex items-center">
               <Users className="w-4 h-4 mr-1.5" />
@@ -253,8 +253,19 @@ export default function TestDetail() {
                   <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} dx={-10} />
                   <Tooltip contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} labelStyle={{ color: '#64748b', fontSize: '12px', marginBottom: '8px' }} labelFormatter={(ts) => format(new Date(ts), 'PPP p')} />
                   <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
-                  <Line type="monotone" dataKey="views" stroke="#4f46e5" strokeWidth={3} dot={false} activeDot={{ r: 6, strokeWidth: 0 }} />
-                  <Line type="monotone" dataKey="conversions" stroke="#10b981" strokeWidth={3} dot={false} activeDot={{ r: 6, strokeWidth: 0 }} />
+                  {test.variants.map((v, i) => (
+                    <Line 
+                      key={v.id}
+                      type="monotone" 
+                      dataKey={(data: any) => data.variantId === v.id ? data.views : null} 
+                      name={`${v.name} Views`}
+                      stroke={['#4f46e5', '#10b981', '#f59e0b'][i % 3]} 
+                      strokeWidth={3} 
+                      dot={false} 
+                      activeDot={{ r: 6, strokeWidth: 0 }} 
+                      connectNulls
+                    />
+                  ))}
                 </LineChart>
               </ResponsiveContainer>
             )}

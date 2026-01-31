@@ -51,7 +51,8 @@ export class DatabaseStorage implements IStorage {
       name: req.name,
       productName: req.productName,
       targetPopulation: req.targetPopulation,
-      durationDays: req.durationDays,
+      startTime: req.startTime,
+      endTime: req.endTime,
       status: (req as any).status || "draft",
       totalGain: (req as any).totalGain || null,
       conversionUplift: (req as any).conversionUplift || null,
@@ -218,13 +219,14 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  async updateTest(testId: number, req: Partial<CreateTestRequest>): Promise<TestWithVariants | undefined> {
+  async updateTest(testId: number, req: any): Promise<TestWithVariants | undefined> {
     const [test] = await db.update(tests)
       .set({
         name: req.name,
         productName: req.productName,
         targetPopulation: req.targetPopulation,
-        durationDays: req.durationDays,
+        startTime: req.startTime ? new Date(req.startTime) : undefined,
+        endTime: req.endTime ? new Date(req.endTime) : undefined,
       })
       .where(eq(tests.id, testId))
       .returning();
