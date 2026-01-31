@@ -113,17 +113,22 @@ export function CreateTestDialog({ open, onOpenChange, initialData, isEditing }:
     if (disabled) return;
     setIsSubmitting(true);
     try {
+      const payload = {
+        ...data,
+        startTime: new Date(data.startTime),
+        endTime: new Date(data.endTime),
+      };
       if (isEditing) {
         const res = await fetch(`/api/tests/${initialData.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
+          body: JSON.stringify(payload),
         });
         if (!res.ok) throw new Error("Failed to update test");
         queryClient.invalidateQueries({ queryKey: [api.tests.list.path] });
         queryClient.invalidateQueries({ queryKey: [api.tests.get.path, initialData.id] });
       } else {
-        await createTest.mutateAsync(data);
+        await createTest.mutateAsync(payload);
       }
       toast({ title: isEditing ? "Test Updated" : "Test Created", description: "Saved successfully." });
       onOpenChange(false);
