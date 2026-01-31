@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { useTests } from "@/hooks/use-tests";
+import { useTests, useAggregateMetrics } from "@/hooks/use-tests";
 import { Plus, Search, Filter, ArrowRight, TrendingUp, Users, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import { MetricCard } from "@/components/MetricCard";
 
 export default function Dashboard() {
   const { data: tests, isLoading } = useTests();
+  const { data: metrics } = useAggregateMetrics();
   const [search, setSearch] = useState("");
   const [isCreateOpen, setCreateOpen] = useState(false);
 
@@ -34,22 +35,22 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <MetricCard 
           label="Active Tests" 
-          value={tests?.filter(t => t.status === 'running').length || 0} 
+          value={metrics?.activeTests ?? 0} 
           icon={<Activity className="w-5 h-5" />}
         />
         <MetricCard 
           label="Total Reach" 
-          value={(tests?.reduce((acc, t) => acc + t.targetPopulation, 0) || 0).toLocaleString()} 
+          value={(metrics?.totalReach ?? 0).toLocaleString()} 
           icon={<Users className="w-5 h-5" />}
         />
         <MetricCard 
           label="Total Conversion Uplift" 
-          value="+21%" 
+          value={metrics?.totalConversionUplift ?? "—"} 
           icon={<TrendingUp className="w-5 h-5" />}
         />
         <MetricCard 
           label="Total Income Uplift" 
-          value="+$21,501" 
+          value={metrics?.totalIncomeUplift ?? "—"} 
           icon={<TrendingUp className="w-5 h-5" />}
         />
       </div>

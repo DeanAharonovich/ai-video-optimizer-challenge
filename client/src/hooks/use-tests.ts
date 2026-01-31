@@ -110,3 +110,20 @@ export function useApplyWinner() {
     },
   });
 }
+
+// Fetch aggregate metrics from database
+export function useAggregateMetrics() {
+  return useQuery({
+    queryKey: ['/api/metrics/aggregate'],
+    queryFn: async () => {
+      const res = await fetch('/api/metrics/aggregate', { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch metrics");
+      return res.json() as Promise<{
+        totalConversionUplift: string;
+        totalIncomeUplift: string;
+        activeTests: number;
+        totalReach: number;
+      }>;
+    },
+  });
+}
