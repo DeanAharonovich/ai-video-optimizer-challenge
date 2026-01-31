@@ -72,7 +72,10 @@ export function registerObjectStorageRoutes(app: Express): void {
    */
   app.get("/objects/{*objectPath}", async (req, res) => {
     try {
-      const objectPath = "/objects/" + req.params.objectPath;
+      // Express 5 returns wildcard paths as an array, join with '/'
+      const rawPath = req.params.objectPath;
+      const pathStr = Array.isArray(rawPath) ? rawPath.join('/') : rawPath;
+      const objectPath = "/objects/" + pathStr;
       const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
       await objectStorageService.downloadObject(objectFile, res);
     } catch (error) {
