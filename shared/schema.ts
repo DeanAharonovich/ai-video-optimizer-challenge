@@ -18,6 +18,7 @@ export const tests = pgTable("tests", {
   conversionUplift: text("conversion_uplift"), // e.g. "+18%"
   incomeUplift: text("income_uplift"), // e.g. "+$2,450"
   winnerVariantId: integer("winner_variant_id"), // ID of the selected winning variant
+  isMock: boolean("is_mock").notNull().default(false), // Indicates demo/mock data for presentation
 });
 
 export const variants = pgTable("variants", {
