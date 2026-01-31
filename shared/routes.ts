@@ -38,7 +38,8 @@ export const api = {
         name: z.string(),
         productName: z.string(),
         targetPopulation: z.number(),
-        durationDays: z.number(),
+        startTime: z.coerce.date(),
+        endTime: z.coerce.date(),
         variants: z.array(z.object({
           name: z.string(),
           videoUrl: z.string(),

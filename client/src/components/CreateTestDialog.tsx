@@ -100,7 +100,7 @@ export function CreateTestDialog({ open, onOpenChange, initialData, isEditing }:
       if (!response.ok) throw new Error("Failed to get upload URL");
       const { uploadURL, objectPath } = await response.json();
       await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
-      setValue(`variants.${variantIndex}.${type === "video" ? "videoUrl" : "thumbnailUrl"}`, objectPath);
+      setValue(`variants.${variantIndex}.${type === "video" ? "videoUrl" : "thumbnailUrl"}`, objectPath, { shouldValidate: true });
       toast({ title: "File Uploaded", description: "Uploaded successfully." });
     } catch (error) {
       toast({ title: "Upload Failed", description: "Failed to upload file.", variant: "destructive" });
